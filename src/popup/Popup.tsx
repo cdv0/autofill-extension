@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import logo from "../../icons/logo.png"
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -251,7 +252,19 @@ const Popup = () => {
           gap: 12,
         }}
       >
-        <h3 style={{ fontWeight: 600, fontSize: 16 }}>Autofill Assistant</h3>
+        {/* LOGO */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            gap: 12,
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <img src={logo} alt="Logo" style={{width: 32, height: 32}} />
+          <h3 style={{ fontWeight: 600, fontSize: 16 }}>Autofill Assistant</h3>
+        </div>
 
         <input
           type="email"
@@ -315,7 +328,21 @@ const Popup = () => {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ fontWeight: 600, fontSize: 16 }}>Autofill Assistant</h3>
+        
+        {/* LOGO */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            gap: 12,
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+        >
+          <img src={logo} alt="Logo" style={{width: 32, height: 32}} />
+          <h3 style={{ fontWeight: 600, fontSize: 16 }}>Autofill Assistant</h3>
+        </div>
+
         <button
           onClick={handleLogout}
           style={{

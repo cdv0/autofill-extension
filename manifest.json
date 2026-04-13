@@ -2,18 +2,29 @@
   "manifest_version": 3,
   "name": "Autofill Assistant",
   "version": "1.0",
-  "action": {
-    "default_popup": "src/popup/main.html"
+
+  "icons": {
+    "128": "icons/logo.png"
   },
+
+  "action": {
+    "default_popup": "src/popup/main.html",
+    "default_icon": {
+      "128": "icons/logo.png"
+    }
+  },
+
   "permissions": [
     "activeTab",
     "scripting",
     "tabs",
     "storage"
   ],
+
   "host_permissions": [
     "<all_urls>"
   ],
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
