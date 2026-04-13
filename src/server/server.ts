@@ -1,108 +1,151 @@
+// server.ts is the backend API that uses AI to match form fields and return autofill instructions
+
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { generateText, tool } from "ai";
-import { model } from "./_internal/setup";
+import { model } from "./internal/setup.ts";
 import { z } from "zod";
 
+// Sets up server. Creates API server. Allows requests from extension. Parses JSON body.
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-app.post("/autofill", async (req, res) => {
-  const { html, screenshot, fields } = req.body;
+app.post("/autofill", async (req, res) => { // Endpoint called
+  const { html, fields } = req.body ?? {};
 
-  const json_input: Record<string, string> = {};
-  fields.forEach(({ label, value }: { label: string; value: string }) => {
-    json_input[label] = value;
+  console.log("Incoming /autofill request");
+  console.log("Has html:", typeof html === "string");
+  console.log("Fields:", fields);
+
+  if (typeof html !== "string" || !html) {
+    return res.status(400).json({ error: "Missing or invalid html" });
+  }
+
+  if (!Array.isArray(fields)) {
+    return res.status(400).json({ error: "Missing or invalid fields array" });
+  }
+
+  const jsonInput: Record<string, string> = {};
+  fields.forEach((field: any) => {
+    if (field && typeof field.label === "string" && typeof field.value === "string") {
+      jsonInput[field.label] = field.value;
+    }
   });
 
-  const instructions: { css_selector: string; value: string; type: "input" | "select" }[] = [];
+  console.log("jsonInput:", jsonInput);
 
+  const instructions: {
+    css_selector: string;
+    value: string;
+    type: "input" | "select";
+  }[] = [];
+
+  // Tool declaration
   const tools = {
     fill_form_input: tool({
-      description: "Fill one or more input fields at once.",
+      description: "Fill one or more input or textarea fields at once.",
       parameters: z.object({
         fields: z.array(
           z.object({
-            css_selector: z.string().describe("The CSS selector used to identify the input element."),
-            value: z.string().describe("Value to fill in."),
+            css_selector: z.string().describe("CSS selector for the input or textarea element."),
+            value: z.string().describe("Value to fill."),
           })
         ),
       }),
       execute: async ({ fields }) => {
-        const results = [];
+        console.log("fill_form_input called with:", fields);
+
         for (const { css_selector, value } of fields) {
           instructions.push({ css_selector, value, type: "input" });
-          results.push(`${css_selector}: ${value}`)
         }
-        return results.join("\n");
+
+        return "Filled input fields.";
       },
     }),
+
     fill_form_dropdown: tool({
-      description: "Fill out one or more dropdown (select) fields at once.",
+      description: "Fill one or more select dropdowns at once.",
       parameters: z.object({
         fields: z.array(
           z.object({
-            value: z.string().describe("The answer to the form's dropdown field."),
-            css_selector: z.string().describe("The CSS selector used to identify this form dropdown's element."),
+            css_selector: z.string().describe("CSS selector for the select element."),
+            value: z.string().describe("Option value to choose."),
           })
-        )
+        ),
       }),
       execute: async ({ fields }) => {
-        const results = [];
+        console.log("fill_form_dropdown called with:", fields);
+
         for (const { css_selector, value } of fields) {
           instructions.push({ css_selector, value, type: "select" });
-          results.push(`${css_selector}: ${value}`)
         }
-        return results.join("\n");
-      }
-    }),
-    done: tool({
-      description: "Call this tool only after all fields are identified. This will signal that the workflow is completed. Do not call any tools after this.",
-      parameters: z.object({}),
-      execute: async (): Promise<string> => {
-        console.log("Finished workflow");
-        return "done";
-      }
-    })
-  }
 
+        return "Filled dropdown fields.";
+      },
+    }),
+
+    done: tool({
+      description: "Call this only after all applicable fields are identified.",
+      parameters: z.object({}),
+      execute: async () => {
+        console.log("done called");
+        return "done";
+      },
+    }),
+  };
+
+  // Gemini API call to execute autofill
   try {
-    await generateText({
+    const result = await generateText({
       model,
-      maxSteps: 20,
+      maxSteps: 2,
       tools,
       toolChoice: "required",
       system: `
-        You are filling out various forms. 
-        You must fill out the form using the user's relevant data: ${JSON.stringify(json_input)}
-        
+        You are matching saved user data to a web form.
+
+        User data:
+        ${JSON.stringify(jsonInput, null, 2)}
+
         Rules:
-          1. Fill all visible input fields in a single fill_form_input call. Do NOT fill one field at a time.
-          2. Fill all visible dropdowns (select) in a single fill_form_dropdowns call. Check the available options, and pick the matching value.
-          3. Only fill fields that have a corresponding value in the patient data. If a field has no matching data, leave it blank. Do not substitute other data or make values up.
-          4. Do not call done until every applicable field is identified.
-          5. Once all fields are identified, call done.
-          `,
+        1. Work fast.
+        2. Use only the provided HTML.
+        3. Fill all matching input and textarea fields in one fill_form_input call.
+        4. Fill all matching select fields in one fill_form_dropdown call.
+        5. Only fill fields with a clear match.
+        6. Do not invent values.
+        7. After identifying all matching fields, call done.
+        8. Prefer stable selectors like id, name, or other direct selectors.
+      `,
       messages: [
         {
           role: "user",
           content: [
-            { type: "image", image: Buffer.from(screenshot.split(",")[1], "base64") },
             {
               type: "text",
-              text: `HTML: ${html}`
-            }
-          ]
-        }
-      ]
+              text: `Form HTML:\n${html}`,
+            },
+          ],
+        },
+      ],
     });
 
-    res.json({ instructions });
+    console.log("generateText result:", result);
+    console.log("Final instructions:", instructions);
+
+    return res.json({ instructions });
   } catch (err: any) {
-    console.error("Error: ", err);
-    res.status(500).json({ error: "Failed to process" });
+    console.error("Autofill backend error:", err);
+
+    return res.status(500).json({
+      error: err?.message || "Failed to process",
+      details: err?.cause || null,
+    });
   }
 });
 
-app.listen(3000, () => console.log("Autofill server running on port 3000"));
+app.listen(3000, () => {
+  console.log("Autofill server running on port 3000");
+});
