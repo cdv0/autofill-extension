@@ -1,4 +1,5 @@
 // server.ts is the backend API that uses AI to match form fields and return autofill instructions
+// COMMAND TO START SERVER: npx tsx src/server/server.ts 
 
 import "dotenv/config";
 import express from "express";
